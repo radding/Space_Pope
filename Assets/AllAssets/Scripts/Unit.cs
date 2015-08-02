@@ -2,11 +2,12 @@
 using System.Collections;
 
 public class Unit : MonoBehaviour {
-	private HexGrid grid;
-	private HexPosition position;
-	public enum State {MOVE, ATTACK, WAIT};
-	private State state = State.MOVE;
+	protected HexGrid grid;
+	public HexPosition position;
+	public enum State {MOVE, ATTACK, WAIT, WAIT_FOR_ORDERS, BUILD, DONE};
+	protected State state = State.MOVE;
 	public bool can_attack = true;
+	public bool can_move = true;
 	public int PLAYER;
 	public int MAX_HP;
 	private int hp;
@@ -16,13 +17,15 @@ public class Unit : MonoBehaviour {
 	public int RANGE;
 	private int HP_BAR_WIDTH = 64;
 	private int HP_BAR_HEIGHT = 16;
-	private bool moving = false;
+	protected bool moving = false;
 	private float t;
 	private Vector3[] path;
 	private int n;	//position on the path
 	private const float MOTION_SPEED = 0.05f;
+	public GameManager gm;
+	public string test_str;
 
-	void SetGrid (HexGrid grid) {
+	public void SetGrid (HexGrid grid) {
 		this.grid = grid;
 		grid.SendMessage ("AddUnit", this);
 	}
@@ -70,6 +73,8 @@ public class Unit : MonoBehaviour {
 	}
 	
 	public void move (HexPosition[] path) {
+		if (!this.can_move)
+			return;
 		if(path.Length < 2) {
 			skipMove();
 			return;
@@ -83,6 +88,7 @@ public class Unit : MonoBehaviour {
 		state = State.ATTACK;
 		if (destination.containsKey ("Unit")) {
 			print ("ERROR: Space occupied.");
+			//add here to check for 
 			grid.actionComplete();
 			return;
 		}
@@ -111,6 +117,7 @@ public class Unit : MonoBehaviour {
 	}
 	
 	public void defend (float strength, float variation) {
+
 		int damage = NegativeBinomialDistribution.fromMeanAndStandardDeviation(strength-1, variation)+1;
 		hp -= damage;
 		if (hp <= 0) {
@@ -122,6 +129,7 @@ public class Unit : MonoBehaviour {
 
 	// Use this for initialization
 	void Start () {
+		this.gm = GameObject.FindGameObjectWithTag ("Manager").GetComponent<GameManager>();
 		hp = MAX_HP;
 	}
 	
@@ -251,5 +259,17 @@ public class Unit : MonoBehaviour {
 		GUIStyle centered = new GUIStyle ();
 		centered.alignment = TextAnchor.MiddleCenter;
 		GUI.Label (new Rect(coordinates.x - HP_BAR_WIDTH/2, coordinates.y + HP_BAR_HEIGHT/2, HP_BAR_WIDTH, HP_BAR_HEIGHT), hp.ToString (), centered);
+	}
+
+	public virtual void _select_cb(HexGrid caller){
+
+	}
+
+	public void select(HexGrid caller){
+		if (state == State.DONE) {
+			return;
+		}
+		_select_cb (caller);
+		caller.select_ (this);
 	}
 }

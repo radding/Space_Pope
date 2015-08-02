@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 
@@ -15,6 +15,7 @@ using System.Collections.Generic;
 
 public class HexGrid : MonoBehaviour {
 
+	public GameManager gm;
 	public GameObject marker;
 	public GameObject unitsRoot;
 	public GameObject obstacles;
@@ -25,7 +26,7 @@ public class HexGrid : MonoBehaviour {
 	//private int timeout = 0;		//waiting is still false as this counts down.
 	//private const int MAX_TIME = 1000;
 	
-	private enum Turn {SELECT, MOVE, ATTACK};
+	private enum Turn {SELECT, MOVE, ATTACK, BUILD, WAIT};
 	private Turn turn = Turn.SELECT;
 	public int PLAYERS = 2;
 	private int player = 0;
@@ -33,10 +34,11 @@ public class HexGrid : MonoBehaviour {
 	private HexPosition mouse = null;
 	private HexPosition selection = null;
 	private HexPosition[] path = null;
-	private AI ai;
+	public AI ai;
 	bool gameOver = false;
 	bool modeSelected = false;
 	bool computerPlayer;
+
 	
 	public void wait() {
 		waiting = true;
@@ -48,7 +50,7 @@ public class HexGrid : MonoBehaviour {
 	}
 	
 	//Is this thread safe? I don't know how thread safety works.
-	void AddUnit (Unit unit) {
+	public void AddUnit (Unit unit) {
 		while(updating > 0) {
 			//do nothing.
 		}
@@ -97,9 +99,11 @@ public class HexGrid : MonoBehaviour {
 	//Returns true if there's at least one attackable unit.
 	private bool selectAttackable (Unit attacker) {
 		return selectAttackable (attacker, attacker.Coordinates);
+//		return true;
 	}
 
 	void Start () {
+
 		unitsRoot.BroadcastMessage ("SetGrid", this);
 		//timeout = MAX_TIME;
 		HexPosition.setColor("Path", Color.yellow, 1);
@@ -114,26 +118,49 @@ public class HexGrid : MonoBehaviour {
 			position.flag("Obstacle");
 		}
 	}
-	
-	private void select () {
+
+	public void state_change(Unit unit){
+		switch (unit.Status) {
+		case Unit.State.MOVE:
+			turn = Turn.MOVE;
+			break;
+		case Unit.State.ATTACK:
+			turn = Turn.ATTACK;
+			break;
+		case Unit.State.WAIT_FOR_ORDERS:
+			turn = Turn.WAIT;
+			break;
+		case Unit.State.BUILD:
+			turn = Turn.BUILD;
+			break;
+		case Unit.State.WAIT:
+			turn = Turn.SELECT;
+//			HexPosition.clearSelection ();
+			break;
+		case Unit.State.DONE:
+			turn = Turn.SELECT;
+			unselect ();
+			break;
+		default:
+			print ("Error: Action " + ((Unit) mouse.getValue ("Unit")).Status + " not implemented.");
+			break;
+		}
+	}
+
+	public void select_(Unit unit){
 		if (mouse.isSelected ("Selectable")) {
 			HexPosition.clearSelection ("Selectable");
 			selection = mouse;
 			mouse.select ("Selection");
-			Unit unit = (Unit) mouse.getValue ("Unit");
 			selectAttackable (unit);
-			switch (unit.Status) {
-			case Unit.State.MOVE:
-				turn = Turn.MOVE;
-				break;
-			case Unit.State.ATTACK:
-				turn = Turn.ATTACK;
-				break;
-			default:
-				print ("Error: Action " + ((Unit) mouse.getValue ("Unit")).Status + " not implemented.");
-				break;
-			}
+			this.state_change(unit);
 		}
+	}
+
+	private void select () {
+		Unit unit = (Unit) mouse.getValue ("Unit");
+		if (unit)
+			unit.select (this);
 	}
 	
 	public void endTurn () {
@@ -209,8 +236,26 @@ public class HexGrid : MonoBehaviour {
 			actuallyAttack ();
 		}
 	}
+
+	private void build(){
+		Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+		RaycastHit[] hits = Physics.RaycastAll(ray);
+		float minDist = float.PositiveInfinity;
+		int min = 0;
+		for (int i=0; i<hits.Length; ++i) {
+			if(hits[i].distance < minDist) {
+				minDist = hits[i].distance;
+				min = i;
+			}
+		}
+		HexPosition newMouse = new HexPosition (hits[min].point);
+		if (!newMouse.containsKey("Obstacle") && !newMouse.containsKey("Unit")) {
+			gm.build_place_here(newMouse);
+		}
+	}
 		
 	void Update () {
+		Debug.Log ("State: " + turn);
 		if (waiting || gameOver || !modeSelected) {
 			return;
 		}
@@ -285,6 +330,9 @@ public class HexGrid : MonoBehaviour {
 					case Turn.ATTACK:
 						attack ();
 						break;
+					case Turn.BUILD:
+						build();
+						break;
 					default:
 						print ("Error: Turn " + turn + " not implemented.");
 						break;
@@ -349,5 +397,10 @@ public class HexGrid : MonoBehaviour {
 			}
 			break;
 		}
+	}
+
+	public void set_build_state(){
+
+		turn = Turn.BUILD;
 	}
 }

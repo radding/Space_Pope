@@ -13,6 +13,13 @@ public class AI {
 		this.units = units;
 		this.player = player;
 	}
+	public void add_unit(Unit unit){
+		this.units.Add(unit);
+	}
+
+	public void update_units(List<Unit> units){
+		this.units = units;
+	}
 
 	private Unit getPreferredEnemy ()
 	{
